@@ -136,7 +136,7 @@ class BDAoOSSSpatialModel(SpatialModel):
         positions for newly added nodes 
         """
         new_nodes = [node for node in tree.expand_tree(mode=Tree.WIDTH) 
-                if tree[node].tag.symbol is not 'Null']
+                if tree[node].tag.symbol != 'Null']
         old_nodes = self.spatial_states.keys()
         removed_nodes = [node for node in old_nodes if node not in new_nodes]
         added_nodes = [node for node in new_nodes if node not in old_nodes]
@@ -493,7 +493,7 @@ class BDAoOSSShapeState(ShapeGrammarState):
         if pnode is not None:
             max_size = self.spatial_model.spatial_states[pnode].size
         # min size is max of child's size
-        cnodes = [n for n in tree[node].fpointer if tree[n].tag.symbol is not 'Null']
+        cnodes = [n for n in tree[node].fpointer if tree[n].tag.symbol != 'Null']
         min_size = np.array([.2, .2, .2])
         for cnode in cnodes:
             min_size = np.max(np.vstack([min_size, self.spatial_model.spatial_states[cnode].size]), 0)
@@ -520,7 +520,6 @@ class BDAoOSSShapeState(ShapeGrammarState):
             raise ValueError('Depth must be greater than 0')
         
         # get nodes at given depth
-        depths = {}
         nodes = self._get_nodes_at_depth(depth=depth) 
         
         try:
@@ -577,13 +576,21 @@ class BDAoOSSShapeState(ShapeGrammarState):
         return not self.__eq__(other)
 
     def __repr__(self):
-        repr_str = "PartName  Size                Position            OccupiedFaces\n"
-        fmt = "P         {0:20}{1:20}{2:20}\n"
+        repr_str = "Id                  Size                Position            DockFace  OccupiedFaces\n"
+        fmt = "{0:20.15}{1:20}{2:20}{3:10}{4:20}\n"
         for node in self.tree.expand_tree(mode=Tree.WIDTH):
-            if self.tree[node].tag.symbol is not 'Null':
-                repr_str = repr_str + fmt.format(np.array_str(self.spatial_model.spatial_states[node].size, precision=2), 
+            if self.tree[node].tag.symbol != 'Null':
+                repr_str = repr_str + fmt.format(node, np.array_str(self.spatial_model.spatial_states[node].size, precision=2), 
                         np.array_str(self.spatial_model.spatial_states[node].position, precision=2), 
+                        str(self.spatial_model.spatial_states[node].dock_face),
                         str(self.spatial_model.spatial_states[node].occupied_faces)) 
+
+        repr_str = repr_str + "\n\nTree Structure\nNode                Children\n"
+        fmt = "{0:20.15}{1:s}\n"
+        for node in self.tree.expand_tree(mode=Tree.WIDTH):
+            if self.tree[node].tag.symbol != 'Null':
+                repr_str = repr_str + fmt.format(node, "".join(['{0:15.10}'.format(child) for child in self.tree[node].fpointer]))
+
 
         return repr_str
 

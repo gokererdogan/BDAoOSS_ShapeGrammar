@@ -46,7 +46,8 @@ print()
 # 4/100 = 40msecs. each image is shown for 20ms, 
 # hence, 90*40ms = 3.6secs. 
 # Each animation is 3.6secs long.
-cmd_template = "convert -delay 4/100 -loop 0 {0:s}/png/{1:s}*.png {0:s}/gif/{1:s}.gif"
-cmd = cmd_template.format(spath, fname)
+cmd_template = "convert -delay 4/100 -loop 0 {0:s}/png/{1:s}*.png {0:s}/gif/{1:s}_{2:03d}.gif"
+# we add the starting viewpoint to the end of the filename because we might need that info later.
+cmd = cmd_template.format(spath, fname, start_z)
 return_code = subprocess.call(cmd, shell=True)
 print("Gif file {0:s} created.".format(fname))
