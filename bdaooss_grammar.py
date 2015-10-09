@@ -77,7 +77,19 @@ def size_prior_independent(parent_size):
     h = np.random.uniform(0.2, 1.0)
     size = np.array([w, d, h])
     return size
-    
+
+def size_prior_infer3dshape(parent_size):
+    """
+    This prior is used in Infer3DShape. It is basically the
+    same with the independent prior; just the max. allowed
+    size is 1.0.
+    """
+    # root part has a fixed size
+    if parent_size is None:
+        return np.array([1.0, 2.0/3.0, 2.0/3.0])
+
+    return np.random.rand(3)
+
 
 
 class BDAoOSSSpatialState:
@@ -98,7 +110,7 @@ class BDAoOSSSpatialState:
         face NO_FACE, and position (0,0,0)
         """
         if size is None or dock_face is None or position is None or occupied_faces is None:
-            self.size = np.array([1.5,1,1])
+            self.size = np.array([1.0,1.0,1.0])
             self.dock_face = NO_FACE
             self.position = np.array([0,0,0])
             self.occupied_faces = []
@@ -108,6 +120,11 @@ class BDAoOSSSpatialState:
             self.position = position
             self.occupied_faces = occupied_faces
 
+    def copy(self):
+        ss = BDAoOSSSpatialState(size=self.size.copy(), dock_face=self.dock_face,
+                                 position=self.position.copy(), occupied_faces=self.occupied_faces[:])
+        return ss
+
 
 class BDAoOSSSpatialModel(SpatialModel):
     """
@@ -115,7 +132,7 @@ class BDAoOSSSpatialModel(SpatialModel):
     For each P node holds the spatial state instance.
     """
 
-    def __init__(self, spatial_states=None):
+    def __init__(self, size_prior=None, spatial_states=None):
         """
         Initialize spatial model
 
@@ -127,7 +144,10 @@ class BDAoOSSSpatialModel(SpatialModel):
 
         # prior for size
         # this is one of the functions defined at the top of this file.
-        self.size_prior = size_prior_independent
+        # self.size_prior = size_prior_independent # used for generating stimuli
+        self.size_prior = size_prior
+        if self.size_prior is None:
+            self.size_prior = size_prior_infer3dshape
 
     def update(self, tree, grammar):
         """
@@ -150,6 +170,17 @@ class BDAoOSSSpatialModel(SpatialModel):
                 parent_sstate = self.spatial_states[tree[n].bpointer]
 
             self.spatial_states[n] = self._get_random_spatial_state(parent_sstate)
+
+        # update positions
+        for n in tree.expand_tree(mode=Tree.WIDTH):
+            if tree[n].tag.symbol == 'P':
+                nsstate = self.spatial_states[n]
+                if tree[n].bpointer is None:
+                    nsstate.position = np.array([0.0, 0.0, 0.0])
+                else:
+                    npsstate = self.spatial_states[tree[n].bpointer]
+                    nsstate.position = npsstate.position + \
+                                       (FACES[nsstate.dock_face, :] * (nsstate.size + npsstate.size) / 2)
 
     def propose(self, tree, grammar): 
         """ 
@@ -179,16 +210,19 @@ class BDAoOSSSpatialModel(SpatialModel):
         if parent_sstate is not None:
             # find all empty faces of the parent part
             available_faces = [f for f in range(FACE_COUNT) if f not in parent_sstate.occupied_faces]
-            
+
+            """
+            This is used when generating stimuli.
             # if the parent is root, don't dock to its bottom face
             if parent_sstate.dock_face == NO_FACE: # this is one way of checking if parent is the root.
                 try:
                     available_faces.remove(5) # 5 is the bottom face
                 except:
                     pass
-                
+            """
+
             face_ix = np.random.choice(available_faces)
-            face = FACES[face_ix] 
+            # face = FACES[face_ix]
             # update parent's occupied faces
             parent_sstate.occupied_faces.append(face_ix)
             # calculate position based on parent's position
@@ -206,7 +240,17 @@ class BDAoOSSSpatialModel(SpatialModel):
         """
         Returns probability of model
         """
-        return 0 
+        return 1.0
+
+    def copy(self):
+        # NOTE that this copy operation assumes that the node ids of a tree stay the
+        # same when it is copied. This is the case for treelib trees.
+        states = {}
+        for n, ss in self.spatial_states.iteritems():
+            states[n] = ss.copy()
+
+        return BDAoOSSSpatialModel(size_prior=self.size_prior, spatial_states=states)
+
 
     def __str__(self):
         repr_str = "PartName  Size                Position            OccupiedFaces\n"
@@ -217,19 +261,27 @@ class BDAoOSSSpatialModel(SpatialModel):
                         str(state.occupied_faces)) 
         return repr_str
 
+    def __repr__(self):
+        repr_str = "PartName  Size                Position            OccupiedFaces\n"
+        fmt = "P         {0:20}{1:20}{2:20}\n"
+        for key, state in self.spatial_states.iteritems():
+            repr_str = repr_str + fmt.format(np.array_str(state.size, precision=2), 
+                        np.array_str(state.position, precision=2), 
+                        str(state.occupied_faces)) 
+        return repr_str
 
 
     
 class BDAoOSSShapeState(ShapeGrammarState): 
     """BDAoOSS shape state class for BDAoOSS grammar and spatial model """ 
-    def __init__(self, forward_model=None, data=None, ll_params=None, spatial_model=None, initial_tree=None, viewpoint=None): 
+    def __init__(self, forward_model=None, data=None, ll_params=None, spatial_model=None, initial_tree=None, viewpoint=None):
         """ Constructor for BDAoOSSShapeState Note that the first parameter ``grammar`` of 
         base class ShapeGrammarState is removed because this class is a grammar specific 
         implementation.  The additional parameter viewpoint determines the viewing point, 
         i.e., from which point in 3D space we look at the object. 
         Here we use spherical coordinates to specify it, i.e., (radius, polar angle, azimuth angle).""" 
-        self.MAXIMUM_DEPTH = 2
-        
+        self.MAXIMUM_DEPTH = 3
+
         if viewpoint is None: 
             viewpoint = [VIEWPOINT_RADIUS, 0.0, 0.0] 
         
@@ -256,9 +308,24 @@ class BDAoOSSShapeState(ShapeGrammarState):
             positions.append(state.position)
             scales.append(state.size)
         return parts, positions, scales, self.viewpoint
+
+    def copy(self):
+        """
+        Returns a copy of the object.
+        """
+        tree = deepcopy(self.tree)
+        sm_copy = self.spatial_model.copy()
+        return BDAoOSSShapeState(forward_model=self.forward_model, data=self.data, ll_params=self.ll_params,
+                                 spatial_model=sm_copy, initial_tree=tree, viewpoint=self.viewpoint)
+
+    def _likelihood(self):
+        """
+        Overwrite the likelihood in base PCFGTree class.
+        We don't want that method to be called because we will
+        implement our own likelihood when we need it.
+        """
+        pass
     
-    
-    """The following methods are used for generating stimuli for the experiment."""
     def _get_nodes_at_depth(self, depth=1):
         """
         Returns a list of nodes at a given depth in the tree.
@@ -269,13 +336,13 @@ class BDAoOSSShapeState(ShapeGrammarState):
         depths = {}
         nodes = []
         for node in tree.expand_tree(mode=Tree.WIDTH):
-            if tree[node].tag.symbol == 'P': 
+            if tree[node].tag.symbol == 'P':
                 # if root, depth is 0
                 if tree[node].bpointer is None:
                     depths[node] = 0
                 else:
                     depths[node] = depths[tree[node].bpointer] + 1
-                
+
                 cdepth = depths[node]
                 if depths[node] == depth:
                     nodes.append(node)
@@ -285,8 +352,99 @@ class BDAoOSSShapeState(ShapeGrammarState):
                     # desired.
                     break
         return nodes
-        
 
+    def add_part(self, parent_node):
+        tree = self.tree
+        sm = self.spatial_model
+        # if the node has only Null as a child, we need to remove that Null
+        # when we add a new part to it.
+        if len(tree[parent_node].fpointer) == 1 and tree[tree[parent_node].fpointer[0]].tag.symbol == 'Null':
+            tree.remove_node(tree[parent_node].fpointer[0])
+
+        # add the new node to tree
+        new_node = tree.create_node(tag=ParseNode('P',0), parent=parent_node)
+        # add a child Null node
+        tree.create_node(tag=ParseNode('Null',''), parent=new_node.identifier)
+
+        # update parent's used production rule
+        tree[parent_node].tag.rule += 1
+        # update spatial model
+        sm.update(tree, bdaooss_shape_pcfg)
+
+    def remove_part(self, node_to_remove):
+        tree = self.tree
+        sm = self.spatial_model
+        # remove node from tree (children nodes are also removed by the method)
+        parent_node = tree[node_to_remove].bpointer
+        tree.remove_node(node_to_remove)
+
+        # if this node was the only child of its parent, we need to add a Null
+        # node to the parent.
+        # if this node was not the only child of its parent, we only need to
+        # update the production rule used in the parent.
+        if len(tree[parent_node].fpointer) == 0:
+            new_node = tree.create_node(tag=ParseNode('Null', ''), parent=parent_node)
+            tree[parent_node].tag.rule = 0
+        else:
+            tree[parent_node].tag.rule -= 1
+
+        # update parent's occupied faces
+        sm.spatial_states[parent_node].occupied_faces.remove(sm.spatial_states[node_to_remove].dock_face)
+
+        # update spatial model
+        sm.update(tree, bdaooss_shape_pcfg)
+
+    def change_part_size(self, node, min_size=np.array([0.0, 0.0, 0.0]), max_size=np.array([1.0, 1.0, 1.0])):
+        tree = self.tree
+        sm = self.spatial_model
+
+        # assign a new random size to part
+        sm.spatial_states[node].size = np.random.uniform(min_size, max_size)
+        # update part's and its children's positions
+        sm.update(tree, bdaooss_shape_pcfg)
+
+    def change_part_dock_face(self, node):
+        tree = self.tree
+        sm = self.spatial_model
+
+        parent_node = tree[node].bpointer
+        sstate = sm.spatial_states[node]
+        parent_sstate = sm.spatial_states[parent_node]
+        # get parent's occupied faces
+        pofaces = parent_sstate.occupied_faces
+        # available faces are the unoccupied faces of the parent but
+        # we need to make sure that when we move the part, it does not
+        # clash with one of the child parts of current node.
+        # therefore, we remove the opposite faces of occupied faces
+        # of our node from the list of available faces too.
+        oofaces = sstate.occupied_faces
+        oofaces = [OPPOSITE_FACES[f] for f in oofaces]
+        # create a list of the available faces by removing occupied
+        # faces
+        afaces = [f for f in range(FACE_COUNT) if f not in pofaces and f not in oofaces]
+        # if there are no available faces, don't move the part.
+        if len(afaces) == 0:
+            return
+
+        # pick one randomly from the available faces
+        face = np.random.choice(afaces)
+
+        # update the occupied_faces of part, set the
+        # old dock_face's opposite face to new dock face's
+        # opposite
+        sstate.occupied_faces[sstate.occupied_faces.index(OPPOSITE_FACES[sstate.dock_face])] = OPPOSITE_FACES[face]
+
+        # update parent's occupied_faces, set the old
+        # dock_face to new dock_face
+        parent_sstate.occupied_faces[parent_sstate.occupied_faces.index(sstate.dock_face)] = face
+
+        # update the dock_face of part
+        sstate.dock_face = face
+
+        # update part's and its children's positions
+        sm.update(tree, bdaooss_shape_pcfg)
+
+    """The following methods are used for generating stimuli for the experiment."""
     def _stimuli_add_part(self, depth=1):
         """
         Adds a new part to the tree at given depth.
@@ -300,6 +458,7 @@ class BDAoOSSShapeState(ShapeGrammarState):
         tree = self.tree
         sm = self.spatial_model
         nodes = self._get_nodes_at_depth(depth=depth)
+
         # if we want to add a part to a node, it should have less
         # than MAX_CHILDREN
         nodes = [node for node in nodes if len(tree[node].fpointer) < MAX_CHILDREN]
@@ -309,22 +468,7 @@ class BDAoOSSShapeState(ShapeGrammarState):
         except ValueError:
             raise ValueError('No nodes to choose from.')
 
-
-        # if the node has only Null as a child, we need to remove that Null
-        # when we add a new part to it.
-        if len(tree[node].fpointer) == 1 and tree[tree[node].fpointer[0]].tag.symbol == 'Null':
-            tree.remove_node(tree[node].fpointer[0])
-
-        # add the new node to tree
-        new_node = tree.create_node(tag=ParseNode('P',0), parent=node)
-        # add a child Null node
-        tree.create_node(tag=ParseNode('Null',''), parent=new_node.identifier)
-
-        # update parent's used production rule
-        tree[node].tag.rule = tree[node].tag.rule + 1 
-        # update spatial model
-        sm.update(tree, bdaooss_shape_pcfg)
-
+        self.add_part(parent_node=node)
 
     def _stimuli_remove_part(self, depth=1):
         """
@@ -342,24 +486,7 @@ class BDAoOSSShapeState(ShapeGrammarState):
         except ValueError:
             raise ValueError('No nodes to choose from.')
 
-        # remove node from tree (children nodes are also removed by the method)
-        pnode = tree[node].bpointer
-        tree.remove_node(node)
-
-        # if this node was the only child of its parent, we need to add a Null
-        # node to the parent.
-        # if this node was not the only child of its parent, we only need to
-        # update the production rule used in the parent.
-        if len(tree[pnode].fpointer) < 1:
-            new_node = tree.create_node(tag=ParseNode('Null', ''), parent=pnode)
-        else:
-            tree[pnode].tag.rule = tree[pnode].tag.rule - 1
-
-        # update parent's occupied faces
-        sm.spatial_states[pnode].occupied_faces.remove(sm.spatial_states[node].dock_face)
-        
-        # update spatial model
-        sm.update(tree, bdaooss_shape_pcfg)
+        self.remove_part(node_to_remove=node)
 
     def _stimuli_move_part(self, depth=1):
         """
@@ -475,8 +602,6 @@ class BDAoOSSShapeState(ShapeGrammarState):
                 nsstate.position = npsstate.position + (FACES[nsstate.dock_face, :] * (nsstate.size + npsstate.size) / 2) 
         
 
-
-
     def _stimuli_vary_part_size(self, depth=1):
         """Pick a part randomly at given depth and change its size.
         """
@@ -497,17 +622,9 @@ class BDAoOSSShapeState(ShapeGrammarState):
         min_size = np.array([.2, .2, .2])
         for cnode in cnodes:
             min_size = np.max(np.vstack([min_size, self.spatial_model.spatial_states[cnode].size]), 0)
-        # assign a new random size to part
-        self.spatial_model.spatial_states[node].size = np.random.uniform(min_size, max_size)
-        # update part's and its children's positions
-        for n in tree.expand_tree(nid=node, mode=Tree.WIDTH):
-            if tree[n].tag.symbol == 'P':
-                nsstate = self.spatial_model.spatial_states[n]
-                if tree[n].bpointer is None: # root node
-                    nsstate.position = np.array([0, 0, 0])
-                else:
-                    npsstate = self.spatial_model.spatial_states[tree[n].bpointer]
-                    nsstate.position = npsstate.position + (FACES[nsstate.dock_face, :] * (nsstate.size + npsstate.size) / 2) 
+
+        self.change_part_dock_face(node, min_size=min_size, max_size=max_size)
+
 
 
     def _stimuli_vary_dock_face(self, depth=1):
@@ -527,43 +644,7 @@ class BDAoOSSShapeState(ShapeGrammarState):
         except ValueError:
             raise ValueError('No nodes to choose from. Provided depth > tree depth?')
 
-        parent_node = tree[node].bpointer
-        sstate = self.spatial_model.spatial_states[node]
-        parent_sstate = self.spatial_model.spatial_states[parent_node]
-        # get parent's occupied faces
-        pofaces = parent_sstate.occupied_faces
-        # available faces are the unoccupied faces of the parent but
-        # we need to make sure that when we move the part, it does not
-        # clash with one of the child parts of current node.
-        # therefore, we remove the opposite faces of occupied faces
-        # of our node from the list of available faces too. 
-        oofaces = sstate.occupied_faces
-        oofaces = [OPPOSITE_FACES[f] for f in oofaces]
-        # create a list of the available faces by removing occupied
-        # faces
-        afaces = [f for f in range(FACE_COUNT) if f not in pofaces and f not in oofaces]
-        # pick one randomly from the available faces
-        face = np.random.choice(afaces)
-        
-        # update the occupied_faces of part, set the
-        # old dock_face's opposite face to new dock face's
-        # opposite
-        sstate.occupied_faces[sstate.occupied_faces.index(OPPOSITE_FACES[sstate.dock_face])] = OPPOSITE_FACES[face] 
-        
-        # update parent's occupied_faces, set the old
-        # dock_face to new dock_face
-        parent_sstate.occupied_faces[parent_sstate.occupied_faces.index(sstate.dock_face)] = face
-        
-        # update the dock_face of part
-        sstate.dock_face = face
-
-        # update part's and its children's positions
-        for n in tree.expand_tree(nid=node, mode=Tree.WIDTH):
-            if tree[n].tag.symbol == 'P':
-                nsstate = self.spatial_model.spatial_states[n]
-                npsstate = self.spatial_model.spatial_states[tree[n].bpointer]
-                nsstate.position = npsstate.position + (FACES[nsstate.dock_face, :] * (nsstate.size + npsstate.size) / 2) 
-
+        self.change_part_dock_face(node)
 
 
     def __eq__(self, other):
