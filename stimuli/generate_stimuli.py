@@ -16,12 +16,12 @@ import datetime
 import os
 
 # stimulus naming:
-#   we denote the object number with ox. Therefore, stimulus
-#   name starts with ox. e.g., o3 (3rd object)
+#   we denote the object number with oX. Therefore, stimulus
+#   name starts with oX. e.g., o3 (3rd object)
 #
 #   then comes the variation related info. If no variations
 #   are applied to the object (i.e., it is the original),
-#   stimulus name is simply ox_orig.
+#   stimulus name is simply oX_orig.
 #
 #   variation (i.e., manipulation) types
 #   t1: changing part properties
@@ -55,7 +55,7 @@ def render_stimuli(name):
     """
     cmd = cmd_template.format(name)
     return_code = subprocess.call(cmd, shell=True)
-    return return_code 
+    return return_code
 
 def generate_object_and_variations(object_id, var_types, var_ops, op_handles, depths):
     """
@@ -172,18 +172,12 @@ op_handles = {'cs' : BDAoOSSShapeState._stimuli_vary_part_size,
 """
 # we are not using the move_part manipulation for now.
 var_types = ['t1', 't2']
-var_ops = {'t1' : ['cs'], 't2' : ['mf', 'ap', 'rp']}
-op_handles = {'cs' : BDAoOSSShapeState._stimuli_vary_part_size,
-              'mf' : BDAoOSSShapeState._stimuli_vary_dock_face,
-              'ap' : BDAoOSSShapeState._stimuli_add_part,
-              'rp' : BDAoOSSShapeState._stimuli_remove_part}
+var_ops = {'t1': ['cs'], 't2': ['mf', 'ap', 'rp']}
+op_handles = {'cs': BDAoOSSShapeState._stimuli_vary_part_size,
+              'mf': BDAoOSSShapeState._stimuli_vary_dock_face,
+              'ap': BDAoOSSShapeState._stimuli_add_part,
+              'rp': BDAoOSSShapeState._stimuli_remove_part}
 
-
-"""
-var_types = []
-var_ops = {}
-op_handles = {}
-"""
 
 # variables for storing the generated stimuli
 object_names = []
