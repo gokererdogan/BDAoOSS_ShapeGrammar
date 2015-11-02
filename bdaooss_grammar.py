@@ -21,7 +21,7 @@ terminals = ['Null']
 nonterminals = ['P']
 start_symbol = 'P'
 rules = {'P' : [['Null'], ['P'], ['P', 'P'], ['P', 'P', 'P']]}
-prod_probabilities = {'P' : [.15, .35, .35, .15]}
+prod_probabilities = {'P' : [.25, .25, .25, .25]}
 terminating_rule_ids = {'P' : [0]}
 # maximum number of child nodes
 MAX_CHILDREN = 3
@@ -125,6 +125,10 @@ class BDAoOSSSpatialState:
                                  position=self.position.copy(), occupied_faces=self.occupied_faces[:])
         return ss
 
+    def __eq__(self, comp):
+        if np.sum(np.abs(self.position - comp.position)) < 1e-6 and np.sum(np.abs(self.size - comp.size)) < 1e-6:
+            return True
+        return False
 
 class BDAoOSSSpatialModel(SpatialModel):
     """
@@ -689,6 +693,7 @@ class BDAoOSSShapeState(ShapeGrammarState):
         state['data'] = self.data
         state['ll_params'] = self.ll_params
         state['viewpoint'] = self.viewpoint
+        state['grammar'] = self.grammar
         return state
     
 
