@@ -1,8 +1,10 @@
 """
 This file contains the script for converting
-BDAoOSS stimuli to Infer3DShape Shape format.
+BDAoOSS stimuli to Infer3DShape Shape format
+for single_view stimuli (objects rendered from
+a single viewpoint).
 
-Created on Sep 17, 2015
+Created on Nov 17, 2015
 
 Goker Erdogan
 https://github.com/gokererdogan/
@@ -11,6 +13,7 @@ https://github.com/gokererdogan/
 import cPickle
 import numpy as np
 import Infer3DShape.shape as hyp
+import Infer3DShape.vision_forward_model as vfm
 
 # BDAoOSSStimuli are larger than Infer3DShape.Shape objects.
 # Maximum size for Infer3DShape.Shape objects are 1.0; it is
@@ -20,7 +23,11 @@ import Infer3DShape.shape as hyp
 # we divide sizes and positions by 2.
 SCALE_FACTOR = 1.0 / (1.5 * 2)
 
-def create_shape_from_stimuli(stim):
+# camera is rotated around z axis with a fixed distance from origin.
+d = np.sqrt(1.5**2 + 1.5**2)
+z = 1.5
+
+def create_shape_from_stimuli(stim, view_angle):
     """
     This function creates a Infer3DShape.Shape instance
     from the BDAoOSSStimuli object
@@ -35,14 +42,20 @@ def create_shape_from_stimuli(stim):
         parts.append(hyp.CuboidPrimitive(position=pos, size=size))
 
     h = hyp.Shape(forward_model=None, parts=parts)
+    view_x = d * np.cos(view_angle * np.pi / 180.0)
+    view_y = d * np.sin(view_angle * np.pi / 180.0)
+    view_z = z
+    h.viewpoint = [(view_x, view_y, view_z)]
     return h
 
 if __name__ == "__main__":
-    fwm = hyp.vfm.VisionForwardModel()
+    fwm = vfm.VisionForwardModel(render_size=(200, 200))
 
     stimuli_folder = 'stimuli20150624_144833'
     stimuli_file = '{0:s}/stimuli_set.pkl'.format(stimuli_folder)
-    save_folder = '../../Infer3DShape/data/{0:s}/'.format(stimuli_folder)
+    save_folder = '../../Infer3DShape/data/{0:s}'.format(stimuli_folder)
+    # read viewpoints for stimuli
+    view_angles = eval(open('{0:s}/viewpoints.txt'.format(stimuli_folder)).read())
 
     # read stimuli
     stim_set = cPickle.load(open(stimuli_file))
@@ -50,15 +63,15 @@ if __name__ == "__main__":
     shapes = {}
     for sname, stim in stim_set.stimuli_objects.iteritems():
         print(sname)
-        h = create_shape_from_stimuli(stim)
+        h = create_shape_from_stimuli(stim, view_angles[sname])
         shapes[sname] = h
         print(h)
         # save render images and data
-        fwm.save_render("{0:s}/png/{1:s}.png".format(save_folder, sname), h)
+        fwm.save_render("{0:s}/png_single_view/{1:s}.png".format(save_folder, sname), h)
         img = fwm.render(h)
-        np.save("{0:s}/{1:s}.npy".format(save_folder, sname), img)
+        np.save("{0:s}/{1:s}_single_view.npy".format(save_folder, sname), img)
 
     # save shapes to disk
-    cPickle.dump(shapes, open("{0:s}/shapes.pkl".format(save_folder), 'wb'), protocol=2)
+    cPickle.dump(shapes, open("{0:s}/shapes_single_view.pkl".format(save_folder), 'wb'), protocol=2)
 
 

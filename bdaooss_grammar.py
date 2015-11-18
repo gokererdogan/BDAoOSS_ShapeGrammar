@@ -10,6 +10,7 @@ Created on May 27, 2015
 from AoMRShapeGrammar.pcfg_tree import *
 from bdaooss_vision_forward_model import BDAoOSSVisionForwardModel
 from AoMRShapeGrammar.shape_grammar import ShapeGrammarState, SpatialModel
+from scipy.misc import comb
 
 """
 Definition of BDAoOSS Probabilistic Context Free Shape Grammar
@@ -244,7 +245,27 @@ class BDAoOSSSpatialModel(SpatialModel):
         """
         Returns probability of model
         """
-        return 1.0
+        # we are assuming that each part picks one docking face from its parent's available faces. then we can go
+        # through each spatial state (i.e., node), look at how many of its faces are occupied (i.e., how many children
+        # it has) and calculate the prior probability. We need to take into account the possible orderings of the
+        # children in the tree as well. Since reordering the children does not change the hypothesis, the prior
+        # probability of picking the faces for a node's children is simply 1 / ( 6 choose number of children), 6 being
+        # the number of docking faces of a node.
+        # Note that we do not need to worry about the prior for size assignments because we have assumed them to be
+        # uniform in [0, 1].
+        p = 1.0
+        for sstate in self.spatial_states.values():
+            # we need to subtract 1 from the number of occupied faces because one
+            # face is occupied by the parent (docking location). however, this is
+            # not true for the root node because the root node does not have a
+            # parent
+            child_count = len(sstate.occupied_faces)
+            if sstate.dock_face != NO_FACE: # if not root
+                child_count -= 1
+
+            if child_count > 0:
+                p *= (1.0 / comb(FACE_COUNT, child_count))
+        return p
 
     def copy(self):
         # NOTE that this copy operation assumes that the node ids of a tree stay the
