@@ -111,9 +111,9 @@ class BDAoOSSSpatialState:
         face NO_FACE, and position (0,0,0)
         """
         if size is None or dock_face is None or position is None or occupied_faces is None:
-            self.size = np.array([1.0,1.0,1.0])
+            self.size = np.array([1.0, 1.0, 1.0])
             self.dock_face = NO_FACE
-            self.position = np.array([0,0,0])
+            self.position = np.array([0.0 ,0.0, 0.0])
             self.occupied_faces = []
         else:
             self.size= size
@@ -167,6 +167,8 @@ class BDAoOSSSpatialModel(SpatialModel):
         added_nodes = [node for node in new_nodes if node not in old_nodes]
 
         for n in removed_nodes:
+            # NOTE occupied faces of parent is already updated in remove_part
+            # OF COURSE, THIS IS QUITE MESSY. ALL THESE SHOULD BE DONE AT A SINGLE PLACE.
             del self.spatial_states[n]
         for n in added_nodes:
             if tree[n].bpointer is None: # root node
@@ -180,9 +182,7 @@ class BDAoOSSSpatialModel(SpatialModel):
         for n in tree.expand_tree(mode=Tree.WIDTH):
             if tree[n].tag.symbol == 'P':
                 nsstate = self.spatial_states[n]
-                if tree[n].bpointer is None:
-                    nsstate.position = np.array([0.0, 0.0, 0.0])
-                else:
+                if tree[n].bpointer is not None:
                     npsstate = self.spatial_states[tree[n].bpointer]
                     nsstate.position = npsstate.position + \
                                        (FACES[nsstate.dock_face, :] * (nsstate.size + npsstate.size) / 2)
@@ -259,9 +259,13 @@ class BDAoOSSSpatialModel(SpatialModel):
             # face is occupied by the parent (docking location). however, this is
             # not true for the root node because the root node does not have a
             # parent
+            # similarly, there are 6 possible faces for a child of the root node, but for all other parent nodes,
+            # there are 5 since 1 of the faces is occupied by the docking to the parent.
+            available_face_count = FACE_COUNT
             child_count = len(sstate.occupied_faces)
             if sstate.dock_face != NO_FACE: # if not root
                 child_count -= 1
+                available_face_count -= 1
 
             if child_count > 0:
                 p *= (1.0 / comb(FACE_COUNT, child_count))
@@ -342,6 +346,11 @@ class BDAoOSSShapeState(ShapeGrammarState):
         sm_copy = self.spatial_model.copy()
         return BDAoOSSShapeState(forward_model=self.forward_model, data=self.data, ll_params=self.ll_params,
                                  spatial_model=sm_copy, initial_tree=tree, viewpoint=self.viewpoint)
+
+
+    def probability(self):
+        # everytime we add a new P part, probability goes down by 1/4.
+        return (1.0/4.0)**(len(self.spatial_model.spatial_states))
 
     def _likelihood(self):
         """
