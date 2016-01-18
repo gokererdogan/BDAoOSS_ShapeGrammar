@@ -88,7 +88,6 @@ def size_prior_infer3dshape(parent_size):
     # root part has a fixed size
     # if parent_size is None:
     #    return np.array([1.0, 2.0/3.0, 2.0/3.0])
-
     return np.random.rand(3)
 
 

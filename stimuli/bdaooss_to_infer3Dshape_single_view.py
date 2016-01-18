@@ -17,15 +17,16 @@ import Infer3DShape.vision_forward_model as vfm
 
 # BDAoOSSStimuli are larger than Infer3DShape.Shape objects.
 # Maximum size for Infer3DShape.Shape objects are 1.0; it is
-# 1.5 for BDAoOSSStimuli. Therefore, we scale the positions
-# and sizes to shrink them.
-# Also, the camera is two times closer in Infer3DShape; hence,
-# we divide sizes and positions by 2.
-SCALE_FACTOR = 1.0 / (1.5 * 2)
+# 1.5 for BDAoOSSStimuli. Also, the camera is located at (0.0, 2.0, 2.0) in Infer3DShape while it is at
+# (0.0, 4*sqrt(2.0), 4*sqrt(2.0)) in BDAoOSS.
+# Therefore, we scale the positions and sizes to shrink them.
+SCALE_FACTOR = 2.0 / (4.0 * np.sqrt(2.0))
 
 # camera is rotated around z axis with a fixed distance from origin.
-d = np.sqrt(1.5**2 + 1.5**2)
-z = 1.5
+# this distance is equal to the height (z) of the camera.
+d = 2.0
+z = 2.0
+
 
 def create_shape_from_stimuli(stim, view_angle):
     """
@@ -73,5 +74,4 @@ if __name__ == "__main__":
 
     # save shapes to disk
     cPickle.dump(shapes, open("{0:s}/shapes_single_view.pkl".format(save_folder), 'wb'), protocol=2)
-
 
