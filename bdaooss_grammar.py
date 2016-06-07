@@ -58,11 +58,13 @@ def size_prior_child_smaller(parent_size):
     size = np.array([w, d, h])
     return size
 
+
 def size_prior_constant(parent_size):
     """
     All parts are the same size.
     """
     return np.array([1.0, 1.0, 1.0])
+
 
 def size_prior_independent(parent_size):
     """
@@ -71,24 +73,24 @@ def size_prior_independent(parent_size):
     """
     # root part has a fixed size
     if parent_size is None:
-        return np.array([1.5, 1.0, 1.0])
+        return np.array([1.5, 1.0, 1.0]) / np.sqrt(8.0)
 
     w = np.random.uniform(0.2, 1.5)
     d = np.random.uniform(0.2, 1.0)
     h = np.random.uniform(0.2, 1.0)
-    size = np.array([w, d, h])
+    size = np.array([w, d, h]) / np.sqrt(8.0)
     return size
+
 
 def size_prior_infer3dshape(parent_size):
     """
     This prior is used in Infer3DShape. It is basically the
-    same with the independent prior; just the max. allowed
-    size is 1.0.
+    same with the independent prior; just the range is [0.02, 1.02]
     """
     # root part has a fixed size
-    # if parent_size is None:
-    #    return np.array([1.0, 2.0/3.0, 2.0/3.0])
-    return np.random.rand(3)
+    if parent_size is None:
+       return np.array([1.5, 1.0, 1.0]) / np.sqrt(8.0)
+    return np.random.rand(3) + 0.02
 
 
 
@@ -427,7 +429,7 @@ class BDAoOSSShapeState(ShapeGrammarState):
         # update spatial model
         sm.update(tree, bdaooss_shape_pcfg)
 
-    def change_part_size(self, node, min_size=np.array([0.0, 0.0, 0.0]), max_size=np.array([1.0, 1.0, 1.0])):
+    def change_part_size(self, node, min_size=np.array([0.02, 0.02, 0.02]), max_size=np.array([1.02, 1.02, 1.02])):
         tree = self.tree
         sm = self.spatial_model
 

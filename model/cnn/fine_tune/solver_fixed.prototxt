@@ -1,0 +1,14 @@
+net: "alexnet_blocks_fixed.prototxt"
+type: "SGD"
+test_iter: 18
+test_interval: 18
+base_lr: 0.01
+lr_policy: "step"
+gamma: 0.1
+stepsize: 450
+display: 18
+max_iter: 180
+momentum: 0.9
+weight_decay: 0.0005
+snapshot_prefix: "snapshot/alexnet_blocks"
+solver_mode: GPU

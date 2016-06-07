@@ -30,7 +30,7 @@ rady = 0
 print('.'),
 radz = rotz * pi / 180.0
 bpy.data.objects['Empty'].rotation_euler = (radx, rady, radz)
-imgname = "{0:s}/single_view/{1:s}.png"
+imgname = "{0:s}/single_view_inverted/{1:s}.png"
 bpy.context.scene.render.filepath = imgname.format(spath, fname)
 bpy.ops.render.render(write_still=True)
 
